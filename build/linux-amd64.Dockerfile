@@ -34,7 +34,7 @@ RUN apt-get -o Acquire::Check-Valid-Until=false update \
     && useradd --create-home smoke \
     && rm -rf /var/lib/apt/lists/*
 RUN set +e; \
-    runuser -u smoke -- xvfb-run -a timeout 45s /usr/bin/dsh-desktop --disable-gpu; \
+    runuser -u smoke -- xvfb-run -a timeout 45s "/opt/DSH Desktop/dsh-desktop" --no-sandbox --disable-gpu; \
     status="$?"; \
     set -e; \
     test "$status" -eq 124

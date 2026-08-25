@@ -96,6 +96,7 @@ describe('GitHub release contract', () => {
     expect(dockerfile).toContain('apt-get install -y')
     expect(dockerfile).toContain('./dist/dsh-desktop-linux-amd64.deb')
     expect(dockerfile).toContain('runuser -u smoke -- xvfb-run')
+    expect(dockerfile).toContain('"/opt/DSH Desktop/dsh-desktop" --no-sandbox')
   })
 
   it('keeps the package and lockfile versions aligned', async () => {
