@@ -50,7 +50,18 @@ describe('GitHub release contract', () => {
       artifactName: 'dsh-desktop-linux-amd64.${ext}',
       packageCategory: 'devel',
       priority: 'optional',
-      depends: ['libgbm1']
+      depends: [
+        'libgtk-3-0',
+        'libnotify4',
+        'libnss3',
+        'libxss1',
+        'libxtst6',
+        'xdg-utils',
+        'libatspi2.0-0',
+        'libuuid1',
+        'libsecret-1-0',
+        'libgbm1'
+      ]
     })
   })
 
