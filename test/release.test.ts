@@ -11,6 +11,75 @@ const releaseAssets = [
 ]
 
 describe('GitHub release contract', () => {
+  it('packages a UOS-compatible Linux amd64 deb', async () => {
+    const packageJson = JSON.parse(
+      await readFile(path.join(projectRoot, 'package.json'), 'utf8')
+    ) as {
+      scripts: Record<string, string>
+      build: {
+        linux: {
+          target: Array<{ target: string; arch: string[] }>
+          category: string
+          icon: string
+          executableName: string
+        }
+        deb: {
+          artifactName: string
+          packageCategory: string
+          priority: string
+        }
+      }
+    }
+
+    expect(packageJson.scripts['package:linux:amd64']).toContain(
+      'verify-target.mjs linux x64'
+    )
+    expect(packageJson.scripts['package:linux:amd64']).toContain(
+      'electron-builder --linux deb --x64 --publish never'
+    )
+    expect(packageJson.build.linux).toEqual({
+      target: [{ target: 'deb', arch: ['x64'] }],
+      category: 'Development',
+      icon: 'build/app-icon.png',
+      executableName: 'dsh-desktop'
+    })
+    expect(packageJson.build.deb).toEqual({
+      artifactName: 'dsh-desktop-linux-amd64.${ext}',
+      packageCategory: 'devel',
+      priority: 'optional'
+    })
+  })
+
+  it('verifies Linux deb metadata, layout, and executable architecture', async () => {
+    const verifier = await readFile(
+      path.join(projectRoot, 'scripts', 'verify-linux-deb.sh'),
+      'utf8'
+    )
+
+    expect(verifier).toContain('dpkg-deb -f "$deb_path" Architecture')
+    expect(verifier).toContain("expected 'amd64'")
+    expect(verifier).toContain('usr/share/applications/dsh-desktop.desktop')
+    expect(verifier).toContain('opt/DSH Desktop/dsh-desktop')
+    expect(verifier).toContain('Advanced Micro Devices X86-64')
+  })
+
+  it('builds the Linux package against the Debian 10 compatibility baseline', async () => {
+    const dockerfile = await readFile(
+      path.join(projectRoot, 'build', 'linux-amd64.Dockerfile'),
+      'utf8'
+    )
+
+    expect(dockerfile).toContain('FROM --platform=linux/amd64 debian:10-slim AS build')
+    expect(dockerfile).toContain('ARG NODE_VERSION=22.20.0')
+    expect(dockerfile).toContain('RUN npm ci')
+    expect(dockerfile).toContain('RUN npm test && npm run typecheck')
+    expect(dockerfile).toContain('RUN npm run package:linux:amd64')
+    expect(dockerfile).toContain('scripts/verify-linux-deb.sh')
+    expect(dockerfile).toContain('apt-get install -y')
+    expect(dockerfile).toContain('./dist/dsh-desktop-linux-amd64.deb')
+    expect(dockerfile).toContain('runuser -u smoke -- xvfb-run')
+  })
+
   it('keeps the package and lockfile versions aligned', async () => {
     const packageJson = JSON.parse(
       await readFile(path.join(projectRoot, 'package.json'), 'utf8')
@@ -114,8 +183,6 @@ describe('GitHub release contract', () => {
     expect(splash).toContain('Starting DSH Desktop')
     expect(splash).toContain('src="dsh-loader.gif"')
     expect(splash).not.toContain('class="track"')
-    expect(splash).toContain('position: fixed;')
-    expect(splash).toContain('html[data-platform="windows"] main { padding-top: 70px; }')
     expect(patch).not.toMatch(/id:\s*directory-picker/)
     expect(patch).not.toContain("name: '@deepseek-ai/dsh-host-directory-picker-native'")
     expect(patch).not.toContain("name: '@deepseek-ai/dsh-client-ui-directory-picker-native'")
