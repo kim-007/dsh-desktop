@@ -25,9 +25,10 @@ describe('GitHub release contract', () => {
           maintainer: string
         }
         deb: {
-          artifactName: string
-          packageCategory: string
-          priority: string
+        artifactName: string
+        packageCategory: string
+        priority: string
+        depends: string[]
         }
       }
     }
@@ -48,7 +49,8 @@ describe('GitHub release contract', () => {
     expect(packageJson.build.deb).toEqual({
       artifactName: 'dsh-desktop-linux-amd64.${ext}',
       packageCategory: 'devel',
-      priority: 'optional'
+      priority: 'optional',
+      depends: ['libgbm1']
     })
   })
 

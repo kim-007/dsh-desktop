@@ -194,7 +194,10 @@
     "deb": {
       "artifactName": "dsh-desktop-linux-amd64.${ext}",
       "packageCategory": "devel",
-      "priority": "optional"
+      "priority": "optional",
+      "depends": [
+        "libgbm1"
+      ]
     }
   }
 }
