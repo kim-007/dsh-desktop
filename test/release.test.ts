@@ -22,6 +22,7 @@ describe('GitHub release contract', () => {
           category: string
           icon: string
           executableName: string
+          maintainer: string
         }
         deb: {
           artifactName: string
@@ -41,7 +42,8 @@ describe('GitHub release contract', () => {
       target: [{ target: 'deb', arch: ['x64'] }],
       category: 'Development',
       icon: 'build/app-icon.png',
-      executableName: 'dsh-desktop'
+      executableName: 'dsh-desktop',
+      maintainer: 'DataElement'
     })
     expect(packageJson.build.deb).toEqual({
       artifactName: 'dsh-desktop-linux-amd64.${ext}',

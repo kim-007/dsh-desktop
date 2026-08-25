@@ -188,7 +188,8 @@
       ],
       "category": "Development",
       "icon": "build/app-icon.png",
-      "executableName": "dsh-desktop"
+      "executableName": "dsh-desktop",
+      "maintainer": "DataElement"
     },
     "deb": {
       "artifactName": "dsh-desktop-linux-amd64.${ext}",
