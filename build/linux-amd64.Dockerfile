@@ -10,7 +10,7 @@ RUN sed -i \
     && apt-get -o Acquire::Check-Valid-Until=false update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       binutils ca-certificates curl fakeroot file g++ git make python3 xz-utils \
-      xvfb dbus-x11 \
+      xvfb xauth dbus-x11 \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -fsSLO "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
