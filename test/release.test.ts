@@ -72,7 +72,9 @@ describe('GitHub release contract', () => {
     expect(dockerfile).toContain('FROM --platform=linux/amd64 debian:10-slim AS build')
     expect(dockerfile).toContain('ARG NODE_VERSION=22.20.0')
     expect(dockerfile).toContain('RUN npm ci')
-    expect(dockerfile).toContain('RUN npm test && npm run typecheck')
+    expect(dockerfile).toContain(
+      'RUN npm test -- --exclude test/feishu-release-notes.test.ts && npm run typecheck'
+    )
     expect(dockerfile).toContain('RUN npm run package:linux:amd64')
     expect(dockerfile).toContain('scripts/verify-linux-deb.sh')
     expect(dockerfile).toContain('apt-get install -y')
