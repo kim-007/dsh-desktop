@@ -1,0 +1,45 @@
+name: Build UOS arm64 DEB
+
+on:
+  push:
+    branches:
+      - codex/uos-arm64-deb
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.20.0'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck
+
+  package:
+    needs: test
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and verify Debian 10 arm64 package
+        env:
+          DOCKER_BUILDKIT: '1'
+        run: |
+          docker build \
+            --platform linux/arm64 \
+            --target artifact \
+            --output type=local,dest=dist-uos \
+            -f build/linux-arm64.Dockerfile \
+            .
+      - name: Upload verified DEB
+        uses: actions/upload-artifact@v4
+        with:
+          name: dsh-desktop-linux-arm64
+          path: dist-uos/dsh-desktop-linux-arm64.deb
+          if-no-files-found: error

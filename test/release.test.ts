@@ -1,8 +1,99 @@
-import { readFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
+import os from 'node:os'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const projectRoot = path.resolve(import.meta.dirname, '..')
+const execFileAsync = promisify(execFile)
+
+type VerifierResult = {
+  status: number
+  stdout: string
+  stderr: string
+}
+
+const withVerifierFixture = async (
+  run: (fixture: {
+    run: (architecture?: string, env?: Record<string, string>) => Promise<VerifierResult>
+    markerPath: string
+  }) => Promise<void>
+) => {
+  const fixtureRoot = await mkdtemp(path.join(os.tmpdir(), 'verify-linux-deb-'))
+  const binPath = path.join(fixtureRoot, 'bin')
+  const debPath = path.join(fixtureRoot, 'fixture.deb')
+  const markerPath = path.join(fixtureRoot, 'dpkg-called')
+  await writeFile(debPath, 'fixture')
+  await mkdir(binPath, { recursive: true })
+  await writeFile(
+    path.join(binPath, 'dpkg-deb'),
+    `#!/usr/bin/env bash
+set -euo pipefail
+if [[ -n "\${DPKG_MARKER:-}" ]]; then : > "$DPKG_MARKER"; fi
+case "$1" in
+  -f)
+    if [[ "$3" == Architecture ]]; then
+      printf '%s\\n' "\${FAKE_ARCH:-amd64}"
+    else
+      printf 'dsh-desktop\\n'
+    fi
+    ;;
+  -c)
+    printf '%s\\n' 'usr/share/applications/dsh-desktop.desktop' 'opt/DSH Desktop/dsh-desktop' 'opt/DSH Desktop/resources/harness-node-entry.mjs'
+    ;;
+  -x)
+    mkdir -p "$3/opt/DSH Desktop"
+    : > "$3/opt/DSH Desktop/dsh-desktop"
+    ;;
+  *) exit 2 ;;
+esac
+`
+  )
+  await writeFile(
+    path.join(binPath, 'readelf'),
+    `#!/usr/bin/env bash
+set -euo pipefail
+printf '  Machine: %s\\n' "\${FAKE_MACHINE:-Advanced Micro Devices X86-64}"
+`
+  )
+  await chmod(path.join(binPath, 'dpkg-deb'), 0o755)
+  await chmod(path.join(binPath, 'readelf'), 0o755)
+
+  const runVerifier = async (
+    architecture?: string,
+    env: Record<string, string> = {}
+  ): Promise<VerifierResult> => {
+    try {
+      const result = await execFileAsync(
+        '/bin/bash',
+        [path.join(projectRoot, 'scripts', 'verify-linux-deb.sh'), debPath, ...(architecture ? [architecture] : [])],
+        {
+          env: {
+            ...process.env,
+            PATH: `${binPath}:${process.env.PATH ?? ''}`,
+            DPKG_MARKER: markerPath,
+            ...env
+          }
+        }
+      )
+      return { status: 0, stdout: result.stdout, stderr: result.stderr }
+    } catch (error) {
+      const failure = error as { code?: number; stdout?: string; stderr?: string }
+      return {
+        status: typeof failure.code === 'number' ? failure.code : 1,
+        stdout: failure.stdout ?? '',
+        stderr: failure.stderr ?? ''
+      }
+    }
+  }
+
+  try {
+    await run({ run: runVerifier, markerPath })
+  } finally {
+    await rm(fixtureRoot, { recursive: true, force: true })
+  }
+}
 
 const releaseAssets = [
   'dsh-desktop-mac-arm64.dmg',
@@ -66,6 +157,36 @@ describe('GitHub release contract', () => {
     })
   })
 
+  it('packages a UOS-compatible Linux arm64 deb', async () => {
+    const packageJson = JSON.parse(
+      await readFile(path.join(projectRoot, 'package.json'), 'utf8')
+    ) as { scripts: Record<string, string> }
+
+    expect(packageJson.scripts['package:linux:arm64']).toContain(
+      'verify-target.mjs linux arm64'
+    )
+    expect(packageJson.scripts['package:linux:arm64']).toContain(
+      'electron-builder --linux deb --arm64 --publish never'
+    )
+    expect(packageJson.scripts['package:linux:arm64']).toContain(
+      "--config.deb.artifactName='dsh-desktop-linux-arm64.${ext}'"
+    )
+  })
+
+  it('builds and uploads the UOS arm64 Debian package from GitHub Actions', async () => {
+    const workflow = await readFile(
+      path.join(projectRoot, '.github', 'workflows', 'uos-arm64-deb.yml'),
+      'utf8'
+    )
+
+    expect(workflow).toContain('codex/uos-arm64-deb')
+    expect(workflow).toContain('runs-on: ubuntu-24.04-arm')
+    expect(workflow).toContain('--platform linux/arm64')
+    expect(workflow).toContain('-f build/linux-arm64.Dockerfile')
+    expect(workflow).toContain('name: dsh-desktop-linux-arm64')
+    expect(workflow).toContain('path: dist-uos/dsh-desktop-linux-arm64.deb')
+  })
+
   it('verifies Linux deb metadata, layout, and executable architecture', async () => {
     const verifier = await readFile(
       path.join(projectRoot, 'scripts', 'verify-linux-deb.sh'),
@@ -73,10 +194,60 @@ describe('GitHub release contract', () => {
     )
 
     expect(verifier).toContain('dpkg-deb -f "$deb_path" Architecture')
-    expect(verifier).toContain("expected 'amd64'")
+    expect(verifier).toContain('expected_arch="${2:-amd64}"')
+    expect(verifier).toContain("amd64) elf_machine='Advanced Micro Devices X86-64'")
+    expect(verifier).toContain("arm64) elf_machine='AArch64'")
+    expect(verifier).toContain('if [ "$architecture" != "$expected_arch" ]')
     expect(verifier).toContain('usr/share/applications/dsh-desktop.desktop')
     expect(verifier).toContain('opt/DSH Desktop/dsh-desktop')
-    expect(verifier).toContain('Advanced Micro Devices X86-64')
+    expect(verifier).toContain('grep -F "$elf_machine"')
+  })
+
+  it.skipIf(process.platform === 'win32')('accepts a default amd64 deb through the verifier', async () => {
+    await withVerifierFixture(async ({ run }) => {
+      const result = await run()
+      expect(result.status).toBe(0)
+      expect(result.stdout).toContain('Verified Linux amd64 DEB')
+    })
+  })
+
+  it.skipIf(process.platform === 'win32')('accepts an explicit arm64 deb through the verifier', async () => {
+    await withVerifierFixture(async ({ run }) => {
+      const result = await run('arm64', {
+        FAKE_ARCH: 'arm64',
+        FAKE_MACHINE: 'AArch64'
+      })
+      expect(result.status).toBe(0)
+      expect(result.stdout).toContain('Verified Linux arm64 DEB')
+    })
+  })
+
+  it.skipIf(process.platform === 'win32')('rejects a deb whose metadata architecture does not match', async () => {
+    await withVerifierFixture(async ({ run }) => {
+      const result = await run('arm64', { FAKE_ARCH: 'amd64' })
+      expect(result.status).toBe(1)
+      expect(result.stderr).toContain("DEB architecture mismatch: expected 'arm64', got 'amd64'.")
+    })
+  })
+
+  it.skipIf(process.platform === 'win32')('rejects a deb whose executable machine does not match', async () => {
+    await withVerifierFixture(async ({ run }) => {
+      const result = await run('arm64', {
+        FAKE_ARCH: 'arm64',
+        FAKE_MACHINE: 'Advanced Micro Devices X86-64'
+      })
+      expect(result.status).toBe(1)
+      expect(result.stdout).toBe('')
+    })
+  })
+
+  it.skipIf(process.platform === 'win32')('rejects unsupported architectures before package processing', async () => {
+    await withVerifierFixture(async ({ run, markerPath }) => {
+      const result = await run('riscv64')
+      expect(result.status).toBe(1)
+      expect(result.stderr).toContain('Unsupported Linux architecture: riscv64')
+      await expect(readFile(markerPath, 'utf8')).rejects.toThrow()
+    })
   })
 
   it('builds the Linux package against the Debian 10 compatibility baseline', async () => {
@@ -95,6 +266,23 @@ describe('GitHub release contract', () => {
     expect(dockerfile).toContain('scripts/verify-linux-deb.sh')
     expect(dockerfile).toContain('apt-get install -y')
     expect(dockerfile).toContain('./dist/dsh-desktop-linux-amd64.deb')
+    expect(dockerfile).toContain('runuser -u smoke -- xvfb-run')
+    expect(dockerfile).toContain('"/opt/DSH Desktop/dsh-desktop" --no-sandbox')
+  })
+
+  it('builds the Linux arm64 package against the Debian 10 compatibility baseline', async () => {
+    const dockerfile = await readFile(
+      path.join(projectRoot, 'build', 'linux-arm64.Dockerfile'),
+      'utf8'
+    )
+
+    expect(dockerfile).toContain('FROM --platform=linux/arm64 debian:10-slim AS build')
+    expect(dockerfile).toContain('node-v${NODE_VERSION}-linux-arm64.tar.xz')
+    expect(dockerfile).toContain('RUN npm run package:linux:arm64')
+    expect(dockerfile).toContain(
+      'scripts/verify-linux-deb.sh dist/dsh-desktop-linux-arm64.deb arm64'
+    )
+    expect(dockerfile).toContain('./dist/dsh-desktop-linux-arm64.deb')
     expect(dockerfile).toContain('runuser -u smoke -- xvfb-run')
     expect(dockerfile).toContain('"/opt/DSH Desktop/dsh-desktop" --no-sandbox')
   })

@@ -40,7 +40,8 @@
     "package:mac:arm64": "node scripts/verify-target.mjs darwin arm64 && npm run build && electron-builder --mac --arm64 --publish never",
     "package:mac:x64": "node scripts/verify-target.mjs darwin x64 && npm run build && electron-builder --mac --x64 --publish never",
     "package:win": "node scripts/verify-target.mjs win32 x64 && npm run build && electron-builder --win --x64 --publish never",
-    "package:linux:amd64": "node scripts/verify-target.mjs linux x64 && npm run build && electron-builder --linux deb --x64 --publish never"
+    "package:linux:amd64": "node scripts/verify-target.mjs linux x64 && npm run build && electron-builder --linux deb --x64 --publish never",
+    "package:linux:arm64": "node scripts/verify-target.mjs linux arm64 && npm run build && electron-builder --linux deb --arm64 --publish never --config.deb.artifactName='dsh-desktop-linux-arm64.${ext}'"
   },
   "dependencies": {
     "@deepseek-ai/cordis-plugin-group": "1.0.1",
@@ -144,6 +145,38 @@
       }
     ],
     "artifactName": "dsh-desktop-${os}-${arch}.${ext}",
+    "linux": {
+      "target": [
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "category": "Development",
+      "icon": "build/app-icon.png",
+      "executableName": "dsh-desktop",
+      "maintainer": "DataElement"
+    },
+    "deb": {
+      "artifactName": "dsh-desktop-linux-amd64.${ext}",
+      "packageCategory": "devel",
+      "priority": "optional",
+      "depends": [
+        "libgtk-3-0",
+        "libnotify4",
+        "libnss3",
+        "libxss1",
+        "libxtst6",
+        "xdg-utils",
+        "libatspi2.0-0",
+        "libuuid1",
+        "libsecret-1-0",
+        "libgbm1",
+        "libasound2"
+      ]
+    },
     "mac": {
       "category": "public.app-category.developer-tools",
       "icon": "build/icon.icns",
@@ -176,38 +209,6 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
-    },
-    "linux": {
-      "target": [
-        {
-          "target": "deb",
-          "arch": [
-            "x64"
-          ]
-        }
-      ],
-      "category": "Development",
-      "icon": "build/app-icon.png",
-      "executableName": "dsh-desktop",
-      "maintainer": "DataElement"
-    },
-    "deb": {
-      "artifactName": "dsh-desktop-linux-amd64.${ext}",
-      "packageCategory": "devel",
-      "priority": "optional",
-      "depends": [
-        "libgtk-3-0",
-        "libnotify4",
-        "libnss3",
-        "libxss1",
-        "libxtst6",
-        "xdg-utils",
-        "libatspi2.0-0",
-        "libuuid1",
-        "libsecret-1-0",
-        "libgbm1",
-        "libasound2"
-      ]
     }
   }
 }
